@@ -19,78 +19,47 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def read_root():
+    return {"status": "online", "message": "SonicLens Processing Server is running"}
+
 @app.post("/api/download")
 def download_video(url: str = Form(...)):
     try:
-        # TEMPORARY: yt-dlp is not working, use local samples
-        url_mapping = {
-            "https://www.youtube.com/watch?v=GX9x62kFsVU": ("gehra_hua.mp3", "Gehra Hua | Dhurandhar"),
-            "https://www.youtube.com/watch?v=Ans8Y59cvds": ("phir_se.mp3", "PHIR SE | Dhurandhar The Revenge"),
-            "https://www.youtube.com/watch?v=nDjloeIB3Pc": ("sitaare.mp3", "Sitaare | Ikkis"),
-            "https://www.youtube.com/watch?v=ko70cExuzZM": ("the_fate_of_ophelia.mp3", "The Fate of Ophelia"),
-            "https://www.youtube.com/watch?v=1FVF-9KQiPo": ("opalite.mp3", "Opalite"),
-        }
-
-        if url in url_mapping:
-            filename, title = url_mapping[url]
-            mp3_path = os.path.join(os.path.dirname(__file__), "samples", filename)
-        else:
-            # Fallback to default sample
-            mp3_path = os.path.join(os.path.dirname(__file__), "audio.mp3")
-            title = "Woh Din Bhi Kya Din The"
-
-        if not os.path.exists(mp3_path):
-            # Try to find any sample as fallback
-            samples_dir = os.path.join(os.path.dirname(__file__), "samples")
-            if os.path.exists(samples_dir) and os.listdir(samples_dir):
-                first_sample = os.listdir(samples_dir)[0]
-                mp3_path = os.path.join(samples_dir, first_sample)
-                title = "Sample Audio"
-            else:
-                raise HTTPException(status_code=500, detail="Sample audio file not found")
+        temp_dir = tempfile.mkdtemp()
         
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(temp_dir, 'audio.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'no_warnings': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            title = info.get('title', 'YouTube Audio')
+            
+        # Find the resulting mp3 file
+        mp3_path = None
+        for f in os.listdir(temp_dir):
+            if f.endswith(".mp3"):
+                mp3_path = os.path.join(temp_dir, f)
+                break
+        
+        if not mp3_path or not os.path.exists(mp3_path):
+             raise HTTPException(status_code=500, detail="Failed to download or convert YouTube audio.")
+             
         return FileResponse(
             mp3_path, 
             media_type='audio/mpeg', 
             filename="audio.mp3",
             headers={"Access-Control-Expose-Headers": "X-Audio-Title", "X-Audio-Title": title.encode('ascii', 'ignore').decode()}
         )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.post("/api/cut")
-def cut_audio(file: UploadFile = File(...), start_time: str = Form(...), end_time: str = Form(...)):
-    try:
-        temp_dir = tempfile.mkdtemp()
-        input_path = os.path.join(temp_dir, "input.mp3")
-        output_path = os.path.join(temp_dir, "output.mp3")
-        
-        with open(input_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
-            
-        # Parse times to check duration
-        def parse_time(t_str):
-            parts = t_str.split(':')
-            if len(parts) == 2:
-                return int(parts[0]) * 60 + float(parts[1])
-            return float(parts[0])
-            
-        s_time = parse_time(start_time)
-        e_time = parse_time(end_time)
-        if e_time - s_time > 60:
-            raise HTTPException(status_code=400, detail="Cut duration cannot exceed 1 minute.")
-            
-        cmd = [
-            "ffmpeg", "-y", "-i", input_path, 
-            "-ss", start_time, "-to", end_time, 
-            "-c", "copy", output_path
-        ]
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        if not os.path.exists(output_path):
-             raise HTTPException(status_code=500, detail="FFmpeg failed to cut the audio.")
-             
-        return FileResponse(output_path, media_type='audio/mpeg', filename="cut_audio.mp3")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -108,7 +77,9 @@ def separate_audio(file: UploadFile = File(...)):
         cmd = [
             "demucs", "-n", "htdemucs_6s", "-o", output_dir, input_path
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise Exception(f"Demucs Error: {result.stderr}")
         
         stem_dir = os.path.join(output_dir, "htdemucs_6s", "input")
         
@@ -149,18 +120,3 @@ def separate_audio(file: UploadFile = File(...)):
         return JSONResponse(content={"stems": stems, "stems_low": stems_low})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/embeddings/{artist}/{stem}")
-def get_embedding(artist: str, stem: str):
-    # Look for the file in the audios directory
-    # Depending on where this is deployed, we look one or two levels up
-    for base_dir in [
-        os.path.join(os.path.dirname(__file__), '..', 'audios'),
-        os.path.join(os.path.dirname(__file__), '..', '..', 'audios'),
-        os.path.join(os.path.dirname(__file__), 'audios'),
-    ]:
-        path = os.path.join(base_dir, artist, 'embeddings', f"{stem}.npy")
-        if os.path.exists(path):
-            return FileResponse(path)
-            
-    raise HTTPException(status_code=404, detail="Embedding not found")

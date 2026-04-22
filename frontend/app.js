@@ -9,7 +9,7 @@ const STEM_COLORS = {
 const ALL_STEMS = ['bass','drums','guitar','other','piano','vocals','full'];
 const PLAYABLE = ['bass','drums','guitar','other','piano','vocals'];
 
-const BACKEND_URL = 'http://127.0.0.1:7860'; // Default FastAPI dev server url
+const BACKEND_URL = 'https://mynkpdr--soniclens-backend-web.modal.run'; // Hugging Face Backend
 
 let DATA = null, currentStem = 'full', selectedSongIdx = null;
 let clusterThresholdFromURL = false;
@@ -42,7 +42,7 @@ let currentPlayingFile = '', currentPlayingStem = '';
 async function init() {
   clusterThresholdFromURL = false;
   clusterSliderDefaulted = false;
-  const artistsRes = await fetch('../backend/artists.json');
+  const artistsRes = await fetch('./data/artists.json');
   const artists = await artistsRes.json();
   const selector = document.getElementById('artist-selector');
   
@@ -96,15 +96,17 @@ async function init() {
   });
 
   try {
-    DATA = await (await fetch(`../backend/${activeArtist}.json`)).json();
+    DATA = await (await fetch(`./data/${activeArtist}.json`)).json();
   } catch(e) {
-    DATA = {
-        songs: [],
-        similarities: { full: [], bass: [], drums: [], guitar: [], other: [], piano: [], vocals: [] },
-        tsne: { full: [], bass: [], drums: [], guitar: [], other: [], piano: [], vocals: [] },
-        stem_energy: { full: [], bass: [], drums: [], guitar: [], other: [], piano: [], vocals: [] }
-    };
+    DATA = { songs: [] };
   }
+
+  // Ensure mandatory fields exist for cleaned JSONs
+  if (!DATA.songs) DATA.songs = [];
+  if (!DATA.similarities) DATA.similarities = Object.fromEntries(ALL_STEMS.map(s => [s, []]));
+  if (!DATA.tsne) DATA.tsne = Object.fromEntries(ALL_STEMS.map(s => [s, []]));
+  if (!DATA.stem_energy) DATA.stem_energy = Object.fromEntries(ALL_STEMS.map(s => [s, []]));
+  if (!DATA.clusters) DATA.clusters = {};
 
   await fetchExistingEmbeddings(activeArtist);
 
@@ -246,7 +248,8 @@ async function loadNpy(url) {
 
 function cosineSimilarity(A, B) {
   let dotProduct = 0, normA = 0, normB = 0;
-  for (let i = 0; i < A.length; i++) {
+  const len = Math.min(A.length, B.length);
+  for (let i = 0; i < len; i++) {
     dotProduct += A[i] * B[i];
     normA += A[i] * A[i];
     normB += B[i] * B[i];
@@ -265,14 +268,34 @@ async function fetchExistingEmbeddings(artist) {
   
   _cachedArtist = artist;
   cachedEmbeddings = {};
-  for (const stem of ALL_STEMS) {
+  
+  const fetchPromises = ALL_STEMS.map(async (stem) => {
     try {
-      cachedEmbeddings[stem] = await loadNpy(`${BACKEND_URL}/api/embeddings/${encodeURIComponent(artist)}/${stem}`);
+      const vectors = await loadNpy(`./data/embeddings/${encodeURIComponent(artist)}/${stem}.npy`);
+      return { stem, vectors };
     } catch (e) {
       console.warn(`Could not load embeddings for ${stem}:`, e);
-      cachedEmbeddings[stem] = [];
+      return { stem, vectors: [] };
     }
-  }
+  });
+
+  const results = await Promise.all(fetchPromises);
+  
+  results.forEach(({ stem, vectors }) => {
+    cachedEmbeddings[stem] = vectors;
+    if (DATA && DATA.songs && vectors.length > 0) {
+      DATA.similarities[stem] = vectors.map((v1) => 
+        vectors.map((v2) => cosineSimilarity(v1, v2))
+      );
+      if (!DATA.tsne[stem] || DATA.tsne[stem].length === 0) {
+          DATA.tsne[stem] = new Array(vectors.length).fill([0, 0]);
+      }
+      if (!DATA.stem_energy[stem] || DATA.stem_energy[stem].length === 0) {
+          DATA.stem_energy[stem] = new Array(vectors.length).fill(1.0);
+      }
+    }
+  });
+
   return cachedEmbeddings;
 }
 
@@ -421,6 +444,7 @@ function setupUploadTab() {
   let stemsDataLow        = null; // Low Quality for storage
   let currentSongInfo     = {};
   let currentTrimTimes    = { start: '0:00', end: '1:00' };
+  let newSongEmbeddings   = {}; // Cache for resumable progress
 
   // ── File drop zone ───────────────────────────────────────────────────────────
   const fileInput  = document.getElementById('file-input');
@@ -438,6 +462,7 @@ function setupUploadTab() {
     audioEl.src = URL.createObjectURL(file);
     audioEl.style.display = 'block';
     setStatus(statusDownload, `File loaded: ${file.name} ✓`);
+    newSongEmbeddings = {}; // Reset progress for new file
     showStep('step-2');
   }
 
@@ -475,21 +500,21 @@ function setupUploadTab() {
     },
     sajni: {
       type: 'file',
-      path: '../backend/samples/sajni.mp3',
+      path: './data/samples/sajni.mp3',
       name: 'Sajni | Laapataa Ladies',
       singer: 'Arijit Singh',
       start: '0:00', end: '0:30'
     },
     laal_ishq: {
       type: 'file',
-      path: '../backend/samples/laal_ishq.mp3',
+      path: './data/samples/laal_ishq.mp3',
       name: 'Laal Ishq | Ram-leela',
       singer: 'Arijit Singh',
       start: '1:00', end: '1:30'
     },
     aayat: {
       type: 'file',
-      path: '../backend/samples/aayat.mp3',
+      path: './data/samples/aayat.mp3',
       name: 'Aayat | Bajirao Mastani',
       singer: 'Arijit Singh',
       start: '0:45', end: '1:15'
@@ -510,14 +535,14 @@ function setupUploadTab() {
     },
     anti_hero: {
       type: 'file',
-      path: '../backend/samples/anti-hero.mp3',
+      path: './data/samples/anti-hero.mp3',
       name: 'Anti-Hero',
       singer: 'Taylor Swift',
       start: '0:00', end: '0:30'
     },
     karma: {
       type: 'file',
-      path: '../backend/samples/ice_spice_-_karma.mp3',
+      path: './data/samples/ice_spice_-_karma.mp3',
       name: 'Karma (ft. Ice Spice)',
       singer: 'Taylor Swift',
       start: '0:00', end: '0:30'
@@ -595,6 +620,7 @@ function setupUploadTab() {
     if (_currentSourceMode === 'file') {
       if (!downloadedAudioBlob) { setStatus(statusDownload, 'Please select an audio file first.', true); return; }
       setStatus(statusDownload, `Using: ${downloadedAudioBlob.name || 'uploaded file'} ✓`);
+      newSongEmbeddings = {}; // Reset progress
       showStep('step-2');
       return;
     }
@@ -607,14 +633,35 @@ function setupUploadTab() {
     btnDownload.disabled = true;
 
     try {
-      const formData = new FormData();
-      formData.append('url', url);
-      const res = await fetch(`${BACKEND_URL}/api/download`, { method: 'POST', body: formData });
-      if (!res.ok) throw new Error(await res.text());
+      const SAMPLE_URLS = {
+        "https://www.youtube.com/watch?v=GX9x62kFsVU": { file: "gehra_hua.mp3", title: "Gehra Hua | Dhurandhar" },
+        "https://www.youtube.com/watch?v=Ans8Y59cvds": { file: "phir_se.mp3", title: "PHIR SE | Dhurandhar The Revenge" },
+        "https://www.youtube.com/watch?v=nDjloeIB3Pc": { file: "sitaare.mp3", title: "Sitaare | Ikkis" },
+        "https://www.youtube.com/watch?v=ko70cExuzZM": { file: "the_fate_of_ophelia.mp3", title: "The Fate of Ophelia" },
+        "https://www.youtube.com/watch?v=1FVF-9KQiPo": { file: "opalite.mp3", title: "Opalite" },
+        "https://www.youtube.com/watch?v=b1kbLwvqugk": { file: "anti-hero.mp3", title: "Anti-Hero" },
+        "https://www.youtube.com/watch?v=XzOvgu3GPwY": { file: "ice_spice_-_karma.mp3", title: "Karma (ft. Ice Spice)" }
+      };
 
-      const title = res.headers.get('X-Audio-Title');
+      let res, title;
+      if (SAMPLE_URLS[url]) {
+          const info = SAMPLE_URLS[url];
+          res = await fetch(`./data/samples/${info.file}`);
+          if (!res.ok) throw new Error("Sample file not found in local data folder.");
+          title = info.title;
+      } else {
+          const formData = new FormData();
+          formData.append('url', url);
+          res = await fetch(`${BACKEND_URL}/api/download`, { method: 'POST', body: formData });
+          if (!res.ok) {
+              const errText = await res.text();
+              if (errText.includes('<!DOCTYPE html>')) throw new Error(`Server Error (${res.status}). Contact the developer.`);
+              throw new Error(errText.substring(0, 100) + 'Contact the developer.');
+          }
+          title = res.headers.get('X-Audio-Title');
+      }
+
       if (title && !songNameVal) currentSongInfo.songName = title;
-
       downloadedAudioBlob = await res.blob();
       const audioEl = document.getElementById('audio-preview-downloaded');
       audioEl.src = URL.createObjectURL(downloadedAudioBlob);
@@ -668,8 +715,13 @@ function setupUploadTab() {
     try {
       const formData = new FormData();
       formData.append('file', cutAudioBlob, 'cut.wav');
+      newSongEmbeddings = {}; // Reset progress for new separation
       const res = await fetch(`${BACKEND_URL}/api/separate`, { method: 'POST', body: formData });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+          const errText = await res.text();
+          if (errText.includes('<!DOCTYPE html>')) throw new Error(`Server Error (${res.status})`);
+          throw new Error(errText.substring(0, 100));
+      }
       const data = await res.json();
       stemsData = data.stems;       // HQ
       stemsDataLow = data.stems_low; // LQ
@@ -693,10 +745,15 @@ function setupUploadTab() {
 
     try {
       await fetchExistingEmbeddings(currentSongInfo.singer);
-      const newSongEmbeddings = {};
+      
       for (const stem of ALL_STEMS) {
         if (!stemsData[stem]) continue;
-        setStatus(statusEmbed, `Generating embedding for stem: ${stem} (HQ)…`);
+        if (newSongEmbeddings[stem]) {
+            console.log(`Skipping already embedded stem: ${stem}`);
+            continue;
+        }
+
+        setStatus(statusEmbed, `Generating embedding for stem: ${stem} (${ALL_STEMS.indexOf(stem) + 1}/${ALL_STEMS.length})…`);
         // Use HQ MP3 stems for best quality embeddings
         newSongEmbeddings[stem] = await getGeminiEmbedding(apiKey, stemsData[stem], 'audio/mpeg');
       }
@@ -740,7 +797,20 @@ function setupUploadTab() {
         DATA.similarities[stem].push(newSimRow);
       });
 
-      ALL_STEMS.forEach(stem => { if (DATA.tsne[stem]) DATA.tsne[stem].push([0, 0]); });
+      ALL_STEMS.forEach(stem => { 
+        if (DATA.tsne[stem]) {
+          let bestIdx = 0;
+          let maxSim = -Infinity;
+          // Find the most similar existing song to place it nearby in the graph
+          for (let i = 0; i < newSongIdx; i++) {
+            const s = DATA.similarities[stem][newSongIdx][i];
+            if (s > maxSim) { maxSim = s; bestIdx = i; }
+          }
+          const [nx, ny] = DATA.tsne[stem][bestIdx] || [0, 0];
+          // Add a tiny random jitter to avoid perfect overlap
+          DATA.tsne[stem].push([nx + (Math.random() - 0.5) * 3, ny + (Math.random() - 0.5) * 3]);
+        }
+      });
 
       // Store LQ stems in library to save space
       storeLocalSong(songObj, stemsDataLow, newSongEmbeddings,
@@ -778,6 +848,7 @@ function setupUploadTab() {
       cutAudioBlob = null;
       stemsData = null;
       stemsDataLow = null;
+      newSongEmbeddings = {};
       currentTrimTimes = { start: '0:00', end: '1:00' };
 
     } catch (e) {
