@@ -1552,11 +1552,12 @@ async function playAudio(songFilename, stem, songTitle) {
       }
   } else {
       const sArtist = slugify(songRef.artist_group);
+      const sSong = slugify(songFilename);
       const releaseBase = 'https://github.com/mynkpdr/songs-similarity-demo/releases/download/files/';
       
       src = stem === 'original'
-        ? `${releaseBase}full--${sArtist}--${songFilename}.ogg`
-        : `${releaseBase}stem--${sArtist}--${songFilename}--${stem}.ogg`;
+        ? `${releaseBase}full--${sArtist}--${sSong}.ogg`
+        : `${releaseBase}stem--${sArtist}--${sSong}--${stem}.ogg`;
   }
 
   // Preserve playback position if switching stems on the same song
