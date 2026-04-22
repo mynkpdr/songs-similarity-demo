@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SonicLens — Audio Similarity Explorer</title>
+  <meta name="description" content="Explore song similarity through stem-level audio embeddings with interactive visualization">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="header">
+    <div class="header-brand">
+      <div class="logo">Sonic<span>Lens</span></div>
+      <select id="artist-selector" class="artist-selector"></select>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab-btn active" data-tab="cluster" id="tab-cluster">🔬 Clusters</button>
+      <button class="tab-btn" data-tab="similarity" id="tab-similarity">🔍 Similarity</button>
+      <button class="tab-btn" data-tab="compare" id="tab-compare">⚖️ Compare</button>
+      <button class="tab-btn" data-tab="heatmap" id="tab-heatmap">🗺️ Heatmap</button>
+      <button class="tab-btn" data-tab="upload" id="tab-upload">📤 Upload</button>
+    </nav>
+  </header>
+
+  <main class="main" id="main-content">
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      <p>Loading audio embeddings…</p>
+    </div>
+
+    <div class="panel" id="panel-upload">
+      <div class="upload-page">
+
+        <!-- Left: Pipeline -->
+        <div class="upload-main">
+          <div class="upload-header">
+            <h2>Add a Song to Your Library</h2>
+            <p class="sub">Process audio through the pipeline to generate embeddings and discover similar songs.</p>
+          </div>
+
+          <!-- Source Tabs -->
+          <div class="source-tabs">
+            <button class="source-tab active" id="tab-yt" onclick="switchSourceTab('yt')">
+              <span class="source-tab-icon">▶</span>YouTube URL
+            </button>
+            <button class="source-tab" id="tab-file" onclick="switchSourceTab('file')">
+              <span class="source-tab-icon">🎵</span>Audio File
+            </button>
+          </div>
+
+          <!-- Step 1: Source -->
+          <div class="upload-step" id="step-1">
+            <div class="upload-step-header">
+              <span class="step-badge">1</span>
+              <div>
+                <h3 id="step1-title">Download from YouTube</h3>
+                <p class="step-desc" id="step1-desc">Paste a YouTube URL to download as MP3.</p>
+              </div>
+            </div>
+
+            <!-- YouTube source -->
+            <div id="source-yt">
+              <div class="upload-field-group">
+                <label for="yt-url">YouTube URL</label>
+                <input type="url" id="yt-url" class="upload-input" placeholder="https://youtube.com/watch?v=…">
+              </div>
+              <div class="sample-audio-hint">
+                <span class="sample-hint-label">Try a sample:</span>
+                <div class="sample-grid-yt">
+                  <div class="sample-card-yt sample-chip-btn" data-type="yt" data-id="gehra_hua">
+                    <div class="sample-card-singer">Arijit Singh</div>
+                    <img src="https://img.youtube.com/vi/GX9x62kFsVU/mqdefault.jpg" alt="Gehra Hua">
+                    <span>Gehra Hua</span>
+                  </div>
+                  <div class="sample-card-yt sample-chip-btn" data-type="yt" data-id="phir_se">
+                    <div class="sample-card-singer">Arijit Singh</div>
+                    <img src="https://img.youtube.com/vi/Ans8Y59cvds/mqdefault.jpg" alt="Phir Se">
+                    <span>Phir Se</span>
+                  </div>
+                  <div class="sample-card-yt sample-chip-btn" data-type="yt" data-id="sitaare">
+                    <div class="sample-card-singer">Arijit Singh</div>
+                    <img src="https://img.youtube.com/vi/nDjloeIB3Pc/mqdefault.jpg" alt="Sitaare">
+                    <span>Sitaare</span>
+                  </div>
+                  <div class="sample-card-yt sample-chip-btn" data-type="yt" data-id="fate_of_ophelia">
+                    <div class="sample-card-singer">Taylor Swift</div>
+                    <img src="https://img.youtube.com/vi/ko70cExuzZM/mqdefault.jpg" alt="Fate of Ophelia">
+                    <span>Fate of Ophelia</span>
+                  </div>
+                  <div class="sample-card-yt sample-chip-btn" data-type="yt" data-id="opalite_yt">
+                    <div class="sample-card-singer">Taylor Swift</div>
+                    <img src="https://img.youtube.com/vi/1FVF-9KQiPo/mqdefault.jpg" alt="Opalite">
+                    <span>Opalite</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- File upload source -->
+            <div id="source-file" style="display:none">
+              <label class="drop-zone" id="drop-zone" for="file-input">
+                <div class="drop-zone-icon">🎵</div>
+                <div class="drop-zone-text">Drop an audio file here</div>
+                <div class="drop-zone-sub">or click to browse — MP3, WAV, OGG, FLAC, M4A</div>
+                <div class="drop-zone-filename" id="drop-zone-filename"></div>
+                <input type="file" id="file-input" accept="audio/*" style="display:none">
+              </label>
+              <div class="sample-audio-hint">
+                <span class="sample-hint-label">Try a sample:</span>
+                <div class="sample-grid-yt">
+                  <div class="sample-card-yt sample-chip-btn" data-type="file" data-id="sajni">
+                    <div class="sample-card-singer">Arijit Singh</div>
+                    <div class="sample-card-icon">🎵</div>
+                    <span>Sajni</span>
+                  </div>
+                  <div class="sample-card-yt sample-chip-btn" data-type="file" data-id="laal_ishq">
+                    <div class="sample-card-singer">Arijit Singh</div>
+                    <div class="sample-card-icon">🎵</div>
+                    <span>Laal Ishq</span>
+                  </div>
+                  <div class="sample-card-yt sample-chip-btn" data-type="file" data-id="aayat">
+                    <div class="sample-card-singer">Arijit Singh</div>
+                    <div class="sample-card-icon">🎵</div>
+                    <span>Aayat</span>
+                  </div>
+                  <div class="sample-card-yt sample-chip-btn" data-type="file" data-id="anti_hero">
+                    <div class="sample-card-singer">Taylor Swift</div>
+                    <div class="sample-card-icon">🎵</div>
+                    <span>Anti-Hero</span>
+                  </div>
+                  <div class="sample-card-yt sample-chip-btn" data-type="file" data-id="karma">
+                    <div class="sample-card-singer">Taylor Swift</div>
+                    <div class="sample-card-icon">🎵</div>
+                    <span>Karma</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Song metadata (shared) -->
+            <div class="upload-row" style="margin-top:1rem">
+              <div class="upload-field-group" style="flex:1">
+                <label for="yt-song-name">Song Name</label>
+                <input type="text" id="yt-song-name" class="upload-input" placeholder="My Awesome Song">
+              </div>
+              <div class="upload-field-group" style="flex:1">
+                <label for="yt-singer">Singer / Artist</label>
+                <select id="yt-singer" class="upload-input"></select>
+                <input type="text" id="yt-new-singer" class="upload-input" placeholder="Or type a new artist name…" style="margin-top:0.4rem">
+              </div>
+            </div>
+
+            <button id="btn-download" class="upload-action-btn primary-btn">
+              <span id="btn-download-icon">⬇</span> <span id="btn-download-label">Download Audio</span>
+            </button>
+            <div id="status-download" class="upload-status"></div>
+            <audio id="audio-preview-downloaded" class="upload-audio-preview" controls style="display:none"></audio>
+          </div>
+
+          <!-- Step 2: Trim (client-side) -->
+          <div class="upload-step step-locked" id="step-2" style="display:none">
+            <div class="upload-step-header">
+              <span class="step-badge">2</span>
+              <div>
+                <h3>Trim Audio <span class="step-badge-sub">Max 60 s</span></h3>
+                <p class="step-desc">Set start and end times. Audio is cut entirely in your browser.</p>
+              </div>
+            </div>
+            <div class="trim-row">
+              <div class="upload-field-group">
+                <label for="cut-start">Start (mm:ss)</label>
+                <input type="text" id="cut-start" class="upload-input trim-input" value="0:00" placeholder="0:00">
+              </div>
+              <div class="trim-arrow">→</div>
+              <div class="upload-field-group">
+                <label for="cut-end">End (mm:ss)</label>
+                <input type="text" id="cut-end" class="upload-input trim-input" value="1:00" placeholder="1:00">
+              </div>
+              <div class="trim-duration" id="trim-duration">Duration: 60s</div>
+            </div>
+            <button id="btn-cut" class="upload-action-btn primary-btn">✂ Trim Audio</button>
+            <div id="status-cut" class="upload-status"></div>
+            <audio id="audio-preview-cut" class="upload-audio-preview" controls style="display:none"></audio>
+          </div>
+
+          <!-- Step 3: Separate -->
+          <div class="upload-step step-locked" id="step-3" style="display:none">
+            <div class="upload-step-header">
+              <span class="step-badge">3</span>
+              <div>
+                <h3>Separate Stems</h3>
+                <p class="step-desc">Demucs AI isolates vocals, drums, bass, guitar, piano &amp; other elements.</p>
+              </div>
+            </div>
+            <button id="btn-separate" class="upload-action-btn primary-btn">⚡ Run Demucs</button>
+            <div id="status-separate" class="upload-status"></div>
+          </div>
+
+          <!-- Step 4: Embed -->
+          <div class="upload-step step-locked" id="step-4" style="display:none">
+            <div class="upload-step-header">
+              <span class="step-badge">4</span>
+              <div>
+                <h3>Generate Embeddings</h3>
+                <p class="step-desc">Uses the Gemini API to embed each stem and compute similarity scores.</p>
+              </div>
+            </div>
+            <div class="upload-field-group">
+              <label for="gemini-key">Gemini API Key</label>
+              <input type="password" id="gemini-key" class="upload-input" placeholder="AIzaSy…">
+            </div>
+            <button id="btn-embed" class="upload-action-btn primary-btn">✨ Generate &amp; Add to Library</button>
+            <div id="status-embed" class="upload-status"></div>
+          </div>
+        </div>
+
+        <!-- Right: My Library -->
+        <aside class="upload-sidebar">
+          <div class="upload-sidebar-header">
+            <h3>My Added Songs</h3>
+            <span class="upload-sidebar-count" id="added-songs-count"></span>
+          </div>
+          <div id="added-songs-list" class="added-songs-grid"></div>
+        </aside>
+
+      </div>
+    </div>
+
+    <div class="panel" id="panel-similarity">
+      <div class="stem-bar" id="sim-stems"></div>
+      <div class="sim-layout">
+        <aside class="sim-sidebar">
+          <input type="text" class="search-box" id="sim-search" placeholder="Search songs…">
+          <div id="sim-song-list"></div>
+        </aside>
+        <div class="sim-content" id="sim-content">
+          <div class="sim-results-header" id="sim-header">
+            <h2>Select a song to find similar tracks</h2>
+            <div class="sub">Click a song from the sidebar to see its nearest neighbors</div>
+          </div>
+          <div id="sim-details"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-compare">
+      <div class="compare-controls-card">
+        <div class="compare-controls-head">
+          <h2>Multi-song Comparison</h2>
+          <div class="sub">Compare 2 to 5 songs using a pairwise matrix. Click any cell for a stem-level breakdown.</div>
+        </div>
+        <div class="compare-controls-row">
+          <select id="compare-add-select"></select>
+          <button class="modal-action-btn primary" id="compare-add-btn">Add Song</button>
+          <button class="modal-action-btn" id="compare-reset-btn">Reset</button>
+        </div>
+        <div class="compare-limit-note" id="compare-limit-note"></div>
+        <div class="compare-selected-list" id="compare-selected-list"></div>
+      </div>
+
+      <div class="compare-summary-grid" id="compare-summary-grid"></div>
+
+      <div class="compare-matrix-layout">
+        <div class="compare-matrix-card">
+          <div class="compare-matrix-head">
+            <h3 id="compare-matrix-title">Pairwise Similarity (Full Mix)</h3>
+            <div class="sub" id="compare-matrix-sub">Matrix view inspired by analytics products: fast scanning, click-to-focus details.</div>
+            <div class="compare-stem-bar" id="compare-stems"></div>
+          </div>
+          <div id="compare-matrix"></div>
+        </div>
+        <div class="compare-pair-card" id="compare-pair-detail">
+          <div class="compare-empty-state">Select at least 2 songs to inspect pair details.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-heatmap">
+      <div class="stem-bar heatmap-stems-spaced" id="heatmap-stems"></div>
+      <div class="heatmap-split">
+        <div class="heatmap-left" id="heatmap-container"></div>
+        <div class="heatmap-right" id="heatmap-detail">
+          <div class="heatmap-detail-empty">Hover a cell to preview<br>Click to lock & interact</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel panel-fullscreen cluster-panel" id="panel-cluster">
+      <div class="cluster-toolbar">
+        <div class="stem-bar" id="cluster-stems"></div>
+          <button class="stem-chip" id="cluster-custom-btn">Custom</button>
+          <div class="cluster-search-wrap">
+            <button class="search-btn" id="cluster-search-btn">🔍 Search Song</button>
+        <div class="cluster-search-dropdown" id="cluster-search-dropdown">
+          <div class="cluster-search-input-wrap">
+            <input type="text" id="cluster-search-input" placeholder="Type song name...">
+          </div>
+          <div class="cluster-search-results" id="cluster-search-results"></div>
+        </div>
+      </div>
+      <div class="cluster-slider-wrap">
+          <label for="sim-threshold">Similarity ≥</label>
+          <input type="range" id="sim-threshold" min="0" max="100" value="75" step="0.1">
+          <span id="sim-threshold-val">75%</span>
+        </div>
+        <div class="cluster-actions">
+          <button class="play-btn" id="cluster-clear-brush">✕ Clear Selection</button>
+        </div>
+      </div>
+      <div class="cluster-split">
+        <div class="cluster-graph-wrap" id="cluster-graph-wrap">
+          <svg id="cluster-svg"></svg>
+          <div class="cluster-size-legend" id="cluster-size-legend"></div>
+        </div>
+        <div class="cluster-detail" id="cluster-detail">
+          <div class="cluster-detail-empty">
+            <div class="cluster-detail-empty-icon">🖱️</div>
+            Brush to select songs<br>
+            <span class="cluster-detail-empty-text">Click & drag on the graph</span>
+          </div>
+        </div>
+      </div>
+      <div class="cluster-custom-panel" id="cluster-custom-panel"></div>
+    </div>
+  </main>
+
+  <!-- Audio Player Bar -->
+  <div class="player-bar" id="player-bar">
+    <div class="player-controls">
+      <button class="ctrl-btn" id="play-pause-btn">▶</button>
+    </div>
+    <div class="now-playing">
+      <div class="np-title" id="np-title">—</div>
+      <div class="np-stem" id="np-stem">—</div>
+    </div>
+    <div class="waveform-wrap" id="waveform-wrap">
+      <canvas class="waveform-canvas" id="waveform-canvas"></canvas>
+      <div class="waveform-progress" id="waveform-progress"></div>
+      <div class="waveform-time" id="waveform-time">0:00 / 0:00</div>
+    </div>
+    <div class="player-stem-btns" id="player-stem-btns"></div>
+  </div>
+
+  <!-- Modal Popup -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal" id="modal">
+      <button class="modal-close" id="modal-close">✕</button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
