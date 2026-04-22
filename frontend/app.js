@@ -1553,7 +1553,7 @@ async function playAudio(songFilename, stem, songTitle) {
   } else {
       const sArtist = slugify(songRef.artist_group);
       const sSong = slugify(songFilename.replace(/\.ogg$/, ''));
-      const releaseBase = 'https://github.com/mynkpdr/songs-similarity-demo/releases/download/files/';
+      const releaseBase = 'https://raw.githubusercontent.com/mynkpdr/songs-similarity-demo/audio-data/';
       
       src = stem === 'original'
         ? `${releaseBase}full--${sArtist}--${sSong}.ogg`
