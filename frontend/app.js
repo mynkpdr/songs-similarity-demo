@@ -1552,7 +1552,7 @@ async function playAudio(songFilename, stem, songTitle) {
       }
   } else {
       const sArtist = slugify(songRef.artist_group);
-      const sSong = slugify(songFilename);
+      const sSong = slugify(songFilename.replace(/\.ogg$/, ''));
       const releaseBase = 'https://github.com/mynkpdr/songs-similarity-demo/releases/download/files/';
       
       src = stem === 'original'
@@ -1614,7 +1614,14 @@ async function fetchAndCacheAudio(src, startAtTime, songFilename, stem) {
     if (!window.audioCtx) window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     
     // Chunked fetching
-    const resp = await fetch(src);
+    // Explicitly follow redirects and omit referrer for GitHub Releases CORS compatibility
+    const resp = await fetch(src, {
+      mode: 'cors',
+      redirect: 'follow',
+      referrerPolicy: 'no-referrer'
+    });
+
+    if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
     const contentLength = +resp.headers.get('content-length') || 2500000;
     const reader = resp.body.getReader();
     const chunks = [];
